@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      # SQLite file lives on the named volume so data survives restarts.
+      - DATABASE_URL=file:/data/sweepstakes.db
+      - PORT=4000
+    volumes:
+      - sweepstakes-data:/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      # Override the host port with FRONTEND_PORT if 8080 is taken.
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  sweepstakes-data:

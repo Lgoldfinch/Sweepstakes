@@ -1,0 +1,92 @@
+// Prisma schema for the Sweepstakes app.
+// The core entities (Entrant, Option) are intentionally domain-agnostic so that
+// "football" is just a `category` value; other domains drop in as presets.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  // Include the Alpine/musl engine so the client works inside the Docker image.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+model Sweepstake {
+  id          String   @id
+  name        String
+  category    String   @default("football")
+  // "ONE_TO_ONE" | "MULTI"
+  drawMode    String   @default("ONE_TO_ONE")
+  // "DRAFT" | "DRAWN"
+  status      String   @default("DRAFT")
+  // Recorded RNG seed used for the draw, kept for fairness/audit.
+  seed        String?
+  // Optional pot tracking: stake per entrant and a JSON payout split.
+  stake       Float    @default(0)
+  payoutSplit String?
+  // MULTI mode: when true, deal options evenly and leave the remainder spare.
+  allowSpare  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  entrants    Entrant[]
+  options     Option[]
+  assignments Assignment[]
+  sidePrizes  SidePrize[]
+}
+
+model Entrant {
+  id           String  @id @default(cuid())
+  sweepstakeId String
+  name         String
+  order        Int     @default(0)
+  paid         Boolean @default(false)
+
+  sweepstake  Sweepstake   @relation(fields: [sweepstakeId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+  sidePrizes  SidePrize[]
+
+  @@index([sweepstakeId])
+}
+
+model Option {
+  id           String  @id @default(cuid())
+  sweepstakeId String
+  label        String
+  // JSON blob for future metadata (flag/logo/colour).
+  meta         String?
+  order        Int     @default(0)
+
+  sweepstake  Sweepstake   @relation(fields: [sweepstakeId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+
+  @@index([sweepstakeId])
+}
+
+model Assignment {
+  id           String   @id @default(cuid())
+  sweepstakeId String
+  entrantId    String
+  optionId     String
+  drawnAt      DateTime @default(now())
+
+  sweepstake Sweepstake @relation(fields: [sweepstakeId], references: [id], onDelete: Cascade)
+  entrant    Entrant    @relation(fields: [entrantId], references: [id], onDelete: Cascade)
+  option     Option     @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([sweepstakeId])
+}
+
+model SidePrize {
+  id              String  @id @default(cuid())
+  sweepstakeId    String
+  name            String
+  note            String?
+  winnerEntrantId String?
+
+  sweepstake    Sweepstake @relation(fields: [sweepstakeId], references: [id], onDelete: Cascade)
+  winnerEntrant Entrant?   @relation(fields: [winnerEntrantId], references: [id], onDelete: SetNull)
+
+  @@index([sweepstakeId])
+}
